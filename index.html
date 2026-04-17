@@ -6,10 +6,11 @@
   <title>Charanas Analyzer — School Exam Management System</title>
   <link rel="stylesheet" href="styles.css"/>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet"/>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <script src="script.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js" defer></script>
   <!-- Exam Builder dependencies -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
   <script>
@@ -36,18 +37,18 @@
     <!-- Two cards -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;width:100%">
       <!-- School Portal -->
-      <div class="card" style="padding:2rem;text-align:center;cursor:pointer;border:2px solid transparent;transition:border .2s,box-shadow .2s;border-radius:16px" onclick="showSchoolDirectLogin()" onmouseenter="this.style.borderColor='#1a6fb5';this.style.boxShadow='0 8px 32px rgba(26,111,181,.15)'" onmouseleave="this.style.borderColor='transparent';this.style.boxShadow=''">
+      <div class="card" style="padding:2rem;text-align:center;cursor:pointer;border:2px solid transparent;transition:border .2s,box-shadow .2s;border-radius:16px" onmouseenter="this.style.borderColor='#1a6fb5';this.style.boxShadow='0 8px 32px rgba(26,111,181,.15)'" onmouseleave="this.style.borderColor='transparent';this.style.boxShadow=''">
         <div style="font-size:2.8rem;margin-bottom:.75rem">🏫</div>
         <h2 style="font-size:1.15rem;font-weight:800;color:#0f172a;margin:0 0 .5rem">School Portal</h2>
         <p style="font-size:.82rem;color:#64748b;margin:0 0 1.5rem;line-height:1.5">Sign in as a teacher, admin or staff member of your school</p>
-        <button class="btn btn-primary btn-full" style="pointer-events:none">Enter School →</button>
+        <button class="btn btn-primary btn-full" onclick="showSchoolDirectLogin()">Enter School →</button>
       </div>
       <!-- Platform Portal -->
-      <div class="card" style="padding:2rem;text-align:center;cursor:pointer;border:2px solid transparent;transition:border .2s,box-shadow .2s;border-radius:16px" onclick="showPlatformLogin()" onmouseenter="this.style.borderColor='#7c3aed';this.style.boxShadow='0 8px 32px rgba(124,58,237,.15)'" onmouseleave="this.style.borderColor='transparent';this.style.boxShadow=''">
+      <div class="card" style="padding:2rem;text-align:center;cursor:pointer;border:2px solid transparent;transition:border .2s,box-shadow .2s;border-radius:16px" onmouseenter="this.style.borderColor='#7c3aed';this.style.boxShadow='0 8px 32px rgba(124,58,237,.15)'" onmouseleave="this.style.borderColor='transparent';this.style.boxShadow=''">
         <div style="font-size:2.8rem;margin-bottom:.75rem">⚙️</div>
         <h2 style="font-size:1.15rem;font-weight:800;color:#0f172a;margin:0 0 .5rem">Platform Admin</h2>
         <p style="font-size:.82rem;color:#64748b;margin:0 0 1.5rem;line-height:1.5">Manage school accounts, system settings and platform configuration</p>
-        <button class="btn btn-full" style="pointer-events:none;background:linear-gradient(135deg,#7c3aed,#1a6fb5);color:#fff;border:none">Enter Platform →</button>
+        <button class="btn btn-full" style="background:linear-gradient(135deg,#7c3aed,#1a6fb5);color:#fff;border:none" onclick="showPlatformLogin()">Enter Platform →</button>
       </div>
     </div>
   </div>
@@ -172,7 +173,7 @@
       </div>
     </div>
     <div class="login-role-hint"><strong>Super Admin:</strong> superadmin / super123</div>
-    <button class="btn btn-primary btn-full" onclick="doLogin()">Sign In →</button>
+    <button class="btn btn-primary btn-full" id="loginBtn" onclick="doLogin()">Sign In →</button>
     <div id="loginErr" class="login-err" style="display:none">❌ Invalid credentials. Check and retry.</div>
   </div>
 </div>
@@ -625,6 +626,22 @@
     <!-- ════ TEACHERS ════ -->
     <section id="s-teachers" class="sec">
       <div class="ph"><h2>👨‍🏫 Teachers</h2><p>Manage teachers, subjects, and system access.</p></div>
+
+      <!-- Teacher Excel Upload Card -->
+      <div class="card" id="tchUploadCard" style="display:none;margin-bottom:1.25rem">
+        <h3>⬆ Import Teachers from Excel</h3>
+        <div class="upload-zone" onclick="document.getElementById('tchFile').click()">
+          <div class="uz-icon">👨‍🏫</div>
+          <h4>Click or drag Excel/CSV file</h4>
+          <p>Columns: Name, Phone, Email, Username, Password, Classes</p>
+          <input type="file" id="tchFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleTeacherUpload(this)"/>
+        </div>
+        <div style="display:flex;gap:.75rem;margin-top:.75rem">
+          <button class="btn btn-outline" onclick="downloadTeacherTemplate()">⬇ Download Template</button>
+          <button class="btn btn-outline" onclick="document.getElementById('tchUploadCard').style.display='none'">✕ Close</button>
+        </div>
+      </div>
+
       <div class="card" style="margin-bottom:1.25rem">
         <h3 id="tchFormTitle">➕ Add Teacher</h3>
         <input type="hidden" id="editTchId"/>
@@ -649,7 +666,11 @@
       </div>
       <div class="card">
         <div class="ctbar"><h3>All Teachers</h3>
-          <div class="search-box"><span>🔍</span><input type="text" placeholder="Search..." oninput="filterTbl('tchTbl',this.value)"/></div>
+          <div style="display:flex;gap:.75rem;flex-wrap:wrap;align-items:center">
+            <div class="search-box"><span>🔍</span><input type="text" placeholder="Search..." oninput="filterTbl('tchTbl',this.value)"/></div>
+            <button class="btn btn-outline btn-sm" onclick="showTeacherUpload()">⬆ Import Excel</button>
+            <button class="btn btn-outline btn-sm" onclick="exportTeachersExcel()">⬇ Export Excel</button>
+          </div>
         </div>
         <div class="tbl-wrap">
           <table id="tchTbl">
@@ -1036,6 +1057,7 @@
         <button class="tb" onclick="openFeesTab('tabFeeStructure',this)" id="tbFeeStructure">🏗 Fee Structure</button>
         <button class="tb" onclick="openFeesTab('tabFeePayments',this)" id="tbFeePayments">💳 Record Payment</button>
         <button class="tb" onclick="openFeesTab('tabFeeStudents',this)" id="tbFeeStudents">🎓 Student Balances</button>
+        <button class="tb" onclick="openFeesTab('tabFeeImport',this)" id="tbFeeImport">⬆ Import Fees</button>
         <button class="tb" onclick="openFeesTab('tabFeeReminders',this)" id="tbFeeReminders">🔔 Reminders</button>
         <button class="tb" onclick="openFeesTab('tabFeeReceipts',this)" id="tbFeeReceipts">🧾 Receipts</button>
       </div>
@@ -1214,8 +1236,9 @@
         <div class="card">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.75rem">
             <h3>🎓 Student Fee Balances</h3>
-            <div style="display:flex;gap:.5rem">
-              <button class="btn btn-outline btn-sm" onclick="exportStudentBalances()">⬇ Export</button>
+            <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+              <button class="btn btn-outline btn-sm" onclick="downloadFeeStatementPDF()">📄 PDF Statement</button>
+              <button class="btn btn-outline btn-sm" onclick="exportStudentBalances()">⬇ Export CSV</button>
             </div>
           </div>
           <div class="tbl-wrap">
@@ -1223,6 +1246,41 @@
               <thead><tr><th onclick="sortTable('feeStudentsBody',0,'num')" class="sortable-th"># <span class="sort-ico">⇅</span></th><th onclick="sortTable('feeStudentsBody',1,'str')" class="sortable-th">Adm No <span class="sort-ico">⇅</span></th><th onclick="sortTable('feeStudentsBody',2,'str')" class="sortable-th">Student Name <span class="sort-ico">⇅</span></th><th onclick="sortTable('feeStudentsBody',3,'str')" class="sortable-th">Class <span class="sort-ico">⇅</span></th><th onclick="sortTable('feeStudentsBody',4,'str')" class="sortable-th">Term <span class="sort-ico">⇅</span></th><th onclick="sortTable('feeStudentsBody',5,'kes')" class="sortable-th">Total Fee <span class="sort-ico">⇅</span></th><th onclick="sortTable('feeStudentsBody',6,'kes')" class="sortable-th">Paid <span class="sort-ico">⇅</span></th><th onclick="sortTable('feeStudentsBody',7,'kes')" class="sortable-th">Balance <span class="sort-ico">⇅</span></th><th onclick="sortTable('feeStudentsBody',8,'str')" class="sortable-th">Status <span class="sort-ico">⇅</span></th><th>Actions</th></tr></thead>
               <tbody id="feeStudentsBody"></tbody>
             </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── IMPORT FEES TAB ── -->
+      <div id="tabFeeImport" class="tab-panel">
+        <div class="sec-stack">
+          <div class="card">
+            <h3>⬆ Import Fee Payments from Excel</h3>
+            <p style="color:var(--muted);font-size:.85rem;margin-bottom:1rem">Upload an Excel file with fee payment records. Existing records for the same student/term/year will be updated with new payments.</p>
+            <div class="upload-zone" onclick="document.getElementById('feeImportFile').click()">
+              <div class="uz-icon">💰</div>
+              <h4>Click or drag Excel/CSV file</h4>
+              <p>Columns: AdmNo, Term, Year, TotalFee, AmountPaid, PaymentDate, PaymentMode, ReceiptNo, Notes</p>
+              <input type="file" id="feeImportFile" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleFeeImport(this)"/>
+            </div>
+            <div style="display:flex;gap:.75rem;margin-top:.75rem;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="downloadFeeImportTemplate()">⬇ Download Template</button>
+              <button class="btn btn-outline" onclick="document.getElementById('feeImportFile').value=''">✕ Clear</button>
+            </div>
+          </div>
+          <div class="card">
+            <h3>📋 Import Instructions</h3>
+            <div style="font-size:.85rem;color:var(--muted);line-height:1.7">
+              <p><strong>Required columns:</strong></p>
+              <ul style="margin:.25rem 0 .75rem 1.25rem">
+                <li><strong>AdmNo</strong> — Student admission number (must exist in system)</li>
+                <li><strong>Term</strong> — e.g. <em>Term 1</em>, <em>Term 2</em>, <em>Term 3</em></li>
+                <li><strong>Year</strong> — e.g. <em>2025</em></li>
+                <li><strong>TotalFee</strong> — Total fee amount for the term (KES)</li>
+                <li><strong>AmountPaid</strong> — Amount being paid in this record (KES)</li>
+              </ul>
+              <p><strong>Optional columns:</strong> PaymentDate, PaymentMode (Cash/Mpesa/Bank/Cheque), ReceiptNo, Notes</p>
+              <p style="margin-top:.5rem">⚠️ Students not found in the system will be skipped. Download the template to see the exact format.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -1988,7 +2046,6 @@
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
-<script src="script.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   if (typeof initApp === 'function') initApp();
