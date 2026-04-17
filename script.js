@@ -302,6 +302,17 @@ function resetPlatformAccount() {
   showPlatformLogin(); // re-render with first-time labels
 }
 function showSchoolDirectLogin() {
+  // If no schools registered yet, redirect to platform admin setup
+  loadPlatform();
+  if (!platformSchools.length) {
+    showPlatformLogin();
+    const plErr = document.getElementById('plErr');
+    if (plErr) {
+      plErr.textContent = 'ℹ️ No schools registered yet. Set up your platform account first, then create a school.';
+      plErr.style.display = 'block';
+    }
+    return;
+  }
   // Go straight to school login without showing school list
   ['dualPortal','platformLogin','schoolSelector','app'].forEach(id => {
     const el = document.getElementById(id); if (el) el.style.display = 'none';
@@ -321,20 +332,27 @@ function doPlatformLogin() {
   const u = document.getElementById('plUser').value.trim();
   const p = document.getElementById('plPass').value;
   document.getElementById('plErr').style.display = 'none';
+  const btn = document.getElementById('plBtn');
+  const origText = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Signing in…'; }
+  const re = () => { if (btn) { btn.disabled = false; btn.textContent = origText; } };
   const creds = getPlatformCreds();
 
   // First-ever run: no creds saved yet — show setup screen
   if (!creds) {
-    if (!u || !p) { document.getElementById('plErr').textContent = '❌ Enter a username and password to set up your platform account.'; document.getElementById('plErr').style.display = 'block'; return; }
-    if (p.length < 6) { document.getElementById('plErr').textContent = '❌ Password must be at least 6 characters.'; document.getElementById('plErr').style.display = 'block'; return; }
+    if (!u || !p) { re(); document.getElementById('plErr').textContent = '❌ Enter a username and password to set up your platform account.'; document.getElementById('plErr').style.display = 'block'; return; }
+    if (p.length < 6) { re(); document.getElementById('plErr').textContent = '❌ Password must be at least 6 characters.'; document.getElementById('plErr').style.display = 'block'; return; }
     setPlatformCreds(u, p);
+    re();
     showToast('Platform account created ✓', 'success');
     showSchoolSelector(true);
     return;
   }
   if (u === creds.username && p === creds.password) {
+    re();
     showSchoolSelector(true);
   } else {
+    re();
     document.getElementById('plErr').textContent = '❌ Invalid platform credentials.';
     document.getElementById('plErr').style.display = 'block';
   }
@@ -561,7 +579,35 @@ function doLogin() {
   const p = document.getElementById('lPass').value;
   document.getElementById('loginErr').style.display = 'none';
 
+  const btn = document.getElementById('loginBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Signing in…'; }
+  const re = () => { if (btn) { btn.disabled = false; btn.textContent = 'Sign In →'; } };
+
   loadPlatform();
+
+  // 1. Built-in superadmin — checked FIRST, before any school loop,
+  //    so it always works even when no schools have been registered yet.
+  if (u === 'superadmin' && p === 'super123') {
+    currentUser = {
+      id: 'builtin',
+      name: 'Super Admin',
+      username: 'superadmin',
+      role: 'superadmin',
+      builtin: true,
+      canAnalyse: true, canReport: true, canMerit: true
+    };
+    // If a specific school was pre-selected, log into it; otherwise show selector.
+    if (currentSchoolId) {
+      const school = platformSchools.find(s => s.id === currentSchoolId);
+      if (school) { loadSchoolContext(school); re(); finishLogin(school); return; }
+    }
+    // No school pre-selected or school not found — go to school selector as platform admin.
+    re();
+    document.getElementById('loginScreen').style.display = 'none';
+    saveSession();
+    showSchoolSelector(true);
+    return;
+  }
 
   // If a school was pre-selected via enterSchool(), only check that school.
   // If coming from showSchoolDirectLogin() (no preselection), check all schools.
@@ -570,8 +616,16 @@ function doLogin() {
     ? platformSchools.filter(s => s.id === savedSchoolId)
     : platformSchools;
 
+  if (targetSchools.length === 0) {
+    re();
+    const errEl = document.getElementById('loginErr');
+    errEl.textContent = '⚠️ No school accounts found. Please contact your Platform Admin to set up a school account first.';
+    errEl.style.display = 'block';
+    return;
+  }
+
   for (const school of targetSchools) {
-    // 1. Check school's own platform credentials (school admin login)
+    // 2. Check school's own platform credentials (school admin login)
     if (school.username === u && school.password === p) {
       loadSchoolContext(school);
       currentUser = {
@@ -580,32 +634,18 @@ function doLogin() {
         name: school.name,
         canAnalyse: true, canReport: true, canMerit: true
       };
-      finishLogin(school);
+      re(); finishLogin(school);
       return;
     }
 
-    // 2. Load this school's data so we can check its admins/teachers
+    // 3. Load this school's data so we can check its admins/teachers
     loadSchoolContext(school);
-
-    // 3. Built-in superadmin (shown in Admin Accounts as "Built-in")
-    if (u === 'superadmin' && p === 'super123') {
-      currentUser = {
-        id: 'builtin',
-        name: 'Super Admin',
-        username: 'superadmin',
-        role: 'superadmin',
-        builtin: true,
-        canAnalyse: true, canReport: true, canMerit: true
-      };
-      finishLogin(school);
-      return;
-    }
 
     // 4. Check admins registered inside this school
     const admin = admins.find(a => a.username === u && a.password === p);
     if (admin) {
       currentUser = { ...admin, canAnalyse:true, canReport:true, canMerit:true };
-      finishLogin(school);
+      re(); finishLogin(school);
       return;
     }
 
@@ -614,7 +654,7 @@ function doLogin() {
     if (teacher) {
       currentUser = { username:teacher.username, role:'teacher', name:teacher.name, teacherId:teacher.id,
         canAnalyse:teacher.canAnalyse, canReport:teacher.canReport, canMerit:teacher.canMerit };
-      finishLogin(school);
+      re(); finishLogin(school);
       return;
     }
 
@@ -622,6 +662,7 @@ function doLogin() {
     currentSchoolId = savedSchoolId;
   }
 
+  re();
   document.getElementById('loginErr').style.display = 'block';
 }
 
@@ -1071,7 +1112,6 @@ function onRpClassChange() {
     const relevantStreams = exam?.classId ? streams.filter(s=>s.classId===exam.classId) : streams;
     rpStream.innerHTML = '<option value="">— All Streams —</option>' + relevantStreams.map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
   }
-}
 
 // Called when student changes
 function onRpStudentChange() {
@@ -1663,16 +1703,48 @@ function buildMeritData(examId, filterStreamId) {
 // Build subject-analysis block (grade distribution + gender means per subject)
 function buildSubjectAnalysisHTML(examId, scopeStudentIds) {
   const exam      = exams.find(e => e.id === examId); if (!exam) return '';
-  const examMarks = marks.filter(m => m.examId === examId &&
+  const isConsolidated = exam.category === 'consolidated';
+  const sourceExamObjs = isConsolidated ? (exam.sourceExamIds||[]).map(id=>exams.find(e=>e.id===id)).filter(Boolean) : [];
+  const examMarks = isConsolidated ? [] : marks.filter(m => m.examId === examId &&
     (scopeStudentIds ? scopeStudentIds.includes(m.studentId) : true));
   const gs        = getActiveGradingSystem();
   const gradeKeys = gs.bands.map(b => b.grade);
 
+  // Helper: get averaged score for a student+subject on a consolidated exam
+  function getConsolidatedScore(studentId, subjectId) {
+    const scores = sourceExamObjs.map(src => {
+      const mk = marks.find(m => m.examId===src.id && m.studentId===studentId && m.subjectId===subjectId);
+      return mk ? mk.score : null;
+    }).filter(sc => sc !== null);
+    return scores.length ? parseFloat((scores.reduce((a,b)=>a+b,0)/scores.length).toFixed(1)) : null;
+  }
+
+  const scopeStudents = scopeStudentIds
+    ? students.filter(s => scopeStudentIds.includes(s.id))
+    : students;
+
   const rows = exam.subjectIds.map(sid => {
-    const sub      = subjects.find(s => s.id === sid); if (!sub) return '';
-    const subMarks = examMarks.filter(m => m.subjectId === sid);
-    if (!subMarks.length) return '';
-    const vals     = subMarks.map(m => m.score);
+    const sub = subjects.find(s => s.id === sid); if (!sub) return '';
+
+    let vals, maleVals, femaleVals;
+    if (isConsolidated && sourceExamObjs.length > 0) {
+      // Build per-student averaged scores for this subject
+      const studentScores = scopeStudents.map(stu => {
+        const avg = getConsolidatedScore(stu.id, sid);
+        return avg !== null ? { score: avg, gender: stu.gender } : null;
+      }).filter(Boolean);
+      if (!studentScores.length) return '';
+      vals       = studentScores.map(x => x.score);
+      maleVals   = studentScores.filter(x => x.gender === 'M').map(x => x.score);
+      femaleVals = studentScores.filter(x => x.gender === 'F').map(x => x.score);
+    } else {
+      const subMarks = examMarks.filter(m => m.subjectId === sid);
+      if (!subMarks.length) return '';
+      vals       = subMarks.map(m => m.score);
+      maleVals   = subMarks.filter(m => { const s=students.find(x=>x.id===m.studentId); return s && s.gender==='M'; }).map(m=>m.score);
+      femaleVals = subMarks.filter(m => { const s=students.find(x=>x.id===m.studentId); return s && s.gender==='F'; }).map(m=>m.score);
+    }
+
     const mn       = vals.reduce((a,b)=>a+b,0) / vals.length;
     const mx       = Math.max(...vals);
     const lo       = Math.min(...vals);
@@ -1680,14 +1752,11 @@ function buildSubjectAnalysisHTML(examId, scopeStudentIds) {
     // grade distribution counts
     const distCounts = {};
     gradeKeys.forEach(g => distCounts[g] = 0);
-    subMarks.forEach(m => {
-      const g = getGrade(m.score, sub.max);
+    vals.forEach(v => {
+      const g = getGrade(v, sub.max);
       if (distCounts[g.grade] !== undefined) distCounts[g.grade]++;
     });
 
-    // gender means
-    const maleVals   = subMarks.filter(m => { const s=students.find(x=>x.id===m.studentId); return s && s.gender==='M'; }).map(m=>m.score);
-    const femaleVals = subMarks.filter(m => { const s=students.find(x=>x.id===m.studentId); return s && s.gender==='F'; }).map(m=>m.score);
     const mMn = maleVals.length   ? (maleVals.reduce((a,b)=>a+b,0)/maleVals.length).toFixed(1)   : '—';
     const fMn = femaleVals.length ? (femaleVals.reduce((a,b)=>a+b,0)/femaleVals.length).toFixed(1) : '—';
 
@@ -2433,6 +2502,71 @@ function exportStudentsExcel() {
 }
 
 // ═══════════════ TEACHERS CRUD ═══════════════
+function showTeacherUpload() {
+  const card = document.getElementById('tchUploadCard');
+  card.style.display = card.style.display === 'none' ? '' : 'none';
+}
+
+function handleTeacherUpload(input) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb   = XLSX.read(e.target.result, { type: 'array' });
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws);
+      let added = 0, skipped = 0, updated = 0;
+      data.forEach(row => {
+        const name     = String(row['Name']     || row['name']     || '').trim();
+        const phone    = String(row['Phone']    || row['phone']    || '').trim();
+        const email    = String(row['Email']    || row['email']    || '').trim();
+        const username = String(row['Username'] || row['username'] || '').trim();
+        const password = String(row['Password'] || row['password'] || '').trim();
+        const clsStr   = String(row['Classes']  || row['classes']  || '').trim();
+        if (!name) { skipped++; return; }
+        const existing = teachers.find(t => (username && t.username === username) || t.name.toLowerCase() === name.toLowerCase());
+        if (existing) {
+          // Update existing
+          if (phone)    existing.phone    = phone;
+          if (email)    existing.email    = email;
+          if (password) existing.password = password;
+          if (clsStr)   existing.classes  = clsStr;
+          updated++;
+        } else {
+          teachers.push({ id: uid(), name, phone, email, username, password, classes: clsStr, subjectIds: [], canAnalyse: false, canReport: false, canMerit: false });
+          added++;
+        }
+      });
+      save(K.teachers, teachers);
+      renderTeachers(); renderDashboard();
+      showToast(`${added} added, ${updated} updated, ${skipped} skipped ✓`, 'success');
+      document.getElementById('tchUploadCard').style.display = 'none';
+    } catch(err) { showToast('Error reading file', 'error'); console.error(err); }
+  };
+  reader.readAsArrayBuffer(file); input.value = '';
+}
+
+function downloadTeacherTemplate() {
+  const data = [{ Name: 'Mr. John Kamau', Phone: '0712345678', Email: 'john@school.ke', Username: 'jkamau', Password: 'pass123', Classes: 'Grade 7, Grade 8' }];
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Teachers');
+  XLSX.writeFile(wb, 'teachers_template.xlsx');
+}
+
+function exportTeachersExcel() {
+  const data = teachers.map(t => ({
+    Name: t.name, Phone: t.phone || '', Email: t.email || '',
+    Username: t.username || '', Classes: t.classes || '',
+    CanAnalyse: t.canAnalyse ? 'Yes' : 'No', CanReport: t.canReport ? 'Yes' : 'No', CanMerit: t.canMerit ? 'Yes' : 'No'
+  }));
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Teachers');
+  XLSX.writeFile(wb, 'teachers_list.xlsx');
+}
+
+
 function renderTeachers() {
   const sc=sortState.teachers.col, sd=sortState.teachers.dir;
   const list=[...teachers].sort((a,b)=>{
@@ -2958,28 +3092,44 @@ function getStudentReport(stuId, examId) {
     }).filter(Boolean);
   }
 
-  const examMarks = marks.filter(m=>m.examId===examId&&m.studentId===stuId);
   total  = subjectRows.reduce((a,r)=>a+(r.score!==null?r.score:0),0);
   mean   = exam.subjectIds.length ? total/exam.subjectIds.length : 0;
   mGrade = getMeanGrade(mean/(subjectRows.reduce((a,r)=>a+(r.max||100),0)/exam.subjectIds.length||100)*8);
   totalPoints = subjectRows.reduce((a,r)=>a+(typeof r.points==='number'?r.points:0),0);
 
+  // Helper: compute a student's total for this exam (handles consolidated via averaging)
+  function getStudentExamTotal(sId) {
+    if (isConsolidated && sourceExamObjs.length > 0) {
+      let hasAny = false;
+      const t = exam.subjectIds.reduce((acc, sid) => {
+        const scores = sourceExamObjs.map(src => {
+          const mk = marks.find(m=>m.examId===src.id&&m.studentId===sId&&m.subjectId===sid);
+          return mk ? mk.score : null;
+        }).filter(sc=>sc!==null);
+        if (scores.length) hasAny = true;
+        return acc + (scores.length ? scores.reduce((a,b)=>a+b,0)/scores.length : 0);
+      }, 0);
+      return hasAny ? parseFloat(t.toFixed(1)) : 0;
+    }
+    return marks.filter(m=>m.examId===examId&&m.studentId===sId).reduce((a,m)=>a+m.score,0);
+  }
+
   // Rank: overall
   const allStudentTotals = students.map(s=>{
-    const tm=marks.filter(m=>m.examId===examId&&m.studentId===s.id).reduce((a,m)=>a+m.score,0);
-    return {id:s.id,total:tm};
+    const tm = getStudentExamTotal(s.id);
+    return {id:s.id, total:tm};
   }).filter(s=>s.total>0).sort((a,b)=>b.total-a.total);
   const overallRank = allStudentTotals.findIndex(s=>s.id===stuId)+1;
 
   // Stream rank
-  const streamStudents=students.filter(s=>s.streamId===stu.streamId).map(s=>{
-    const tm=marks.filter(m=>m.examId===examId&&m.studentId===s.id).reduce((a,m)=>a+m.score,0);
-    return {id:s.id,total:tm};
+  const streamStudents = students.filter(s=>s.streamId===stu.streamId).map(s=>{
+    const tm = getStudentExamTotal(s.id);
+    return {id:s.id, total:tm};
   }).filter(s=>s.total>0).sort((a,b)=>b.total-a.total);
   const streamRank = streamStudents.findIndex(s=>s.id===stuId)+1;
 
-  // Historical performance across all exams
-  const history = exams.map(ex => {
+  // Historical performance across all non-consolidated exams
+  const history = exams.filter(ex => ex.category !== 'consolidated').map(ex => {
     const exMarks = marks.filter(m=>m.examId===ex.id&&m.studentId===stuId);
     if (!exMarks.length) return null;
     const exTotal = exMarks.reduce((a,m)=>a+m.score,0);
@@ -5324,6 +5474,7 @@ function openFeesTab(tabId, btn) {
   if (tabId === 'tabFeeStudents')   renderStudentBalances();
   if (tabId === 'tabFeeReminders')  renderFeeReminders();
   if (tabId === 'tabFeeReceipts')   renderReceiptsLog();
+  // tabFeeImport is static HTML — no render call needed
 }
 
 // ── Populate Fees Filter Dropdowns ──
@@ -5397,6 +5548,7 @@ function initFeesSection() {
     tbFeePayments  : isFullFees,
     tbFeeReminders : isFullFees,
     tbFeeReceipts  : isFullFees,
+    tbFeeImport    : isFullFees,
     tbFeeStudents  : isFullFees || isClassTch,
     tbFeeOverview  : true, // always
   };
@@ -6261,7 +6413,195 @@ function exportStudentBalances() {
   exportFeesSummary();
 }
 
-function printFeeReport() {
+// ── Fee PDF Statement ──
+function downloadFeeStatementPDF() {
+  loadFees();
+  const filterClass  = document.getElementById('fsbClass')?.value  || '';
+  const filterTerm   = document.getElementById('fsbTerm')?.value   || '';
+  const filterYear   = document.getElementById('fsbYear')?.value   || '';
+  const filterStatus = document.getElementById('fsbStatus')?.value || '';
+  const search       = (document.getElementById('fsbSearch')?.value || '').toLowerCase();
+  const schoolName   = (settings && settings.schoolName) ? settings.schoolName : 'School';
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  // Header
+  doc.setFillColor(37, 99, 235);
+  doc.rect(0, 0, 210, 28, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(16);
+  doc.setFont(undefined, 'bold');
+  doc.text(schoolName, 14, 11);
+  doc.setFontSize(10);
+  doc.setFont(undefined, 'normal');
+  doc.text('FEE STATEMENT', 14, 18);
+  const today = new Date().toLocaleDateString('en-KE', { day:'2-digit', month:'long', year:'numeric' });
+  doc.text(`Generated: ${today}`, 14, 24);
+
+  // Filter info
+  doc.setTextColor(60, 60, 60);
+  doc.setFontSize(8.5);
+  let filterText = [];
+  if (filterClass) { const cls = classes.find(c=>c.id===filterClass); if(cls) filterText.push(`Class: ${cls.name}`); }
+  if (filterTerm)  filterText.push(`Term: ${filterTerm}`);
+  if (filterYear)  filterText.push(`Year: ${filterYear}`);
+  if (filterStatus) filterText.push(`Status: ${filterStatus.charAt(0).toUpperCase()+filterStatus.slice(1)}`);
+  if (filterText.length) doc.text('Filters: ' + filterText.join('  |  '), 14, 34);
+
+  // Build rows
+  let rows = [];
+  let totalExpected = 0, totalPaid = 0, totalBal = 0;
+
+  const isTeacher = currentUser && currentUser.role === 'teacher';
+  const isFullFeesRole = currentUser && (currentUser.role==='superadmin'||currentUser.role==='admin'||currentUser.role==='principal'||currentUser.role==='bursar');
+  const teacherClassIds = (isTeacher && !isFullFeesRole)
+    ? [...new Set(getClassTeacherStreamIds(currentUser.teacherId).map(sid => { const s=streams.find(x=>x.id===sid); return s?s.classId:null; }).filter(Boolean))]
+    : null;
+
+  feeRecords.forEach(rec => {
+    if (filterTerm   && rec.term !== filterTerm)              return;
+    if (filterYear   && String(rec.year) !== filterYear)      return;
+    if (filterClass  && rec.classId !== filterClass)          return;
+    if (teacherClassIds && !teacherClassIds.includes(rec.classId)) return;
+    const stu = students.find(s => s.id === rec.studentId); if (!stu) return;
+    if (search && !stu.name.toLowerCase().includes(search) && !stu.adm.toLowerCase().includes(search)) return;
+    const cls   = classes.find(c => c.id === rec.classId);
+    const paid  = getRecordTotalPaid(rec);
+    const bal   = getRecordBalance(rec);
+    const status = bal <= 0 ? 'Cleared' : paid > 0 ? 'Partial' : 'Unpaid';
+    if (filterStatus && status.toLowerCase() !== filterStatus) return;
+    totalExpected += parseFloat(rec.totalFee||0);
+    totalPaid     += paid;
+    totalBal      += bal;
+    rows.push([stu.adm, stu.name, cls?.name||'—', `${rec.term} ${rec.year}`, `KES ${parseFloat(rec.totalFee||0).toLocaleString()}`, `KES ${paid.toLocaleString()}`, `KES ${bal.toLocaleString()}`, status]);
+  });
+
+  // Also unpaid rows
+  students.forEach(stu => {
+    const clsId = stu.classId;
+    if (teacherClassIds && !teacherClassIds.includes(clsId)) return;
+    if (filterClass && clsId !== filterClass) return;
+    if (search && !stu.name.toLowerCase().includes(search) && !stu.adm.toLowerCase().includes(search)) return;
+    const structs = feeStructures.filter(f => f.classId===clsId && (!filterTerm||f.term===filterTerm) && (!filterYear||String(f.year)===filterYear));
+    structs.forEach(struct => {
+      if (feeRecords.some(r => r.studentId===stu.id && r.term===struct.term && String(r.year)===struct.year)) return;
+      if (filterStatus && filterStatus !== 'unpaid') return;
+      const cls = classes.find(c=>c.id===clsId);
+      totalExpected += parseFloat(struct.totalFee||0);
+      totalBal      += parseFloat(struct.totalFee||0);
+      rows.push([stu.adm, stu.name, cls?.name||'—', `${struct.term} ${struct.year}`, `KES ${parseFloat(struct.totalFee||0).toLocaleString()}`, 'KES 0', `KES ${parseFloat(struct.totalFee||0).toLocaleString()}`, 'Unpaid']);
+    });
+  });
+
+  rows.sort((a,b) => a[1].localeCompare(b[1]));
+
+  const startY = filterText.length ? 38 : 32;
+
+  doc.autoTable({
+    startY,
+    head: [['Adm No', 'Student Name', 'Class', 'Term/Year', 'Total Fee', 'Paid', 'Balance', 'Status']],
+    body: rows,
+    theme: 'grid',
+    headStyles: { fillColor: [37, 99, 235], textColor: 255, fontStyle: 'bold', fontSize: 8 },
+    bodyStyles: { fontSize: 7.5, cellPadding: 1.5 },
+    columnStyles: { 1: { cellWidth: 38 }, 7: { fontStyle: 'bold' } },
+    didParseCell: (data) => {
+      if (data.section === 'body' && data.column.index === 7) {
+        const val = data.cell.raw;
+        if (val === 'Cleared') data.cell.styles.textColor = [22, 163, 74];
+        else if (val === 'Partial') data.cell.styles.textColor = [202, 138, 4];
+        else data.cell.styles.textColor = [220, 38, 38];
+      }
+    },
+    margin: { left: 14, right: 14 }
+  });
+
+  // Summary footer
+  const finalY = doc.lastAutoTable.finalY + 6;
+  doc.setFillColor(245, 247, 250);
+  doc.rect(14, finalY, 182, 18, 'F');
+  doc.setFontSize(8.5);
+  doc.setFont(undefined, 'bold');
+  doc.setTextColor(30, 30, 30);
+  doc.text(`Total Students: ${rows.length}`, 18, finalY + 5.5);
+  doc.setTextColor(37, 99, 235);
+  doc.text(`Expected: KES ${totalExpected.toLocaleString()}`, 18, finalY + 12);
+  doc.setTextColor(22, 163, 74);
+  doc.text(`Collected: KES ${totalPaid.toLocaleString()}`, 75, finalY + 12);
+  doc.setTextColor(220, 38, 38);
+  doc.text(`Outstanding: KES ${totalBal.toLocaleString()}`, 135, finalY + 12);
+
+  const label = [filterClass&&classes.find(c=>c.id===filterClass)?.name, filterTerm, filterYear].filter(Boolean).join('_') || 'all';
+  doc.save(`fee_statement_${label}.pdf`);
+  showToast('Fee statement PDF downloaded ✓', 'success');
+}
+
+// ── Fee Excel Import ──
+function handleFeeImport(input) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb   = XLSX.read(e.target.result, { type: 'array' });
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const data = XLSX.utils.sheet_to_json(ws);
+      loadFees();
+      let added = 0, updated = 0, skipped = 0;
+      data.forEach(row => {
+        const admNo  = String(row['AdmNo']  || row['admno']  || row['Adm No'] || '').trim();
+        const term   = String(row['Term']   || row['term']   || '').trim();
+        const year   = String(row['Year']   || row['year']   || '').trim();
+        const total  = parseFloat(row['TotalFee']    || row['total_fee']    || 0);
+        const amount = parseFloat(row['AmountPaid']  || row['amount_paid']  || 0);
+        const mode   = String(row['PaymentMode'] || row['payment_mode'] || 'Cash').trim();
+        const notes  = String(row['Notes']  || row['notes']  || '').trim();
+        const rno    = String(row['ReceiptNo'] || row['receipt_no'] || genReceiptNo()).trim();
+        let   pdate  = String(row['PaymentDate'] || row['payment_date'] || '').trim();
+        if (!pdate) pdate = new Date().toISOString().slice(0,10);
+
+        if (!admNo || !term || !year || !total) { skipped++; return; }
+        const stu = students.find(s => s.adm === admNo);
+        if (!stu) { skipped++; return; }
+
+        let rec = feeRecords.find(r => r.studentId===stu.id && r.term===term && String(r.year)===year);
+        if (!rec) {
+          rec = { id: uid(), studentId: stu.id, classId: stu.classId, term, year, totalFee: total, payments: [] };
+          feeRecords.push(rec);
+          added++;
+        } else {
+          if (total) rec.totalFee = total;
+          updated++;
+        }
+
+        if (amount > 0) {
+          const balBefore = getRecordBalance(rec);
+          const balAfter  = Math.max(0, balBefore - amount);
+          rec.payments.push({ id: uid(), receiptNo: rno, date: pdate, amount, mode, notes, balanceBefore: balBefore, balanceAfter: balAfter });
+        }
+      });
+      saveFees();
+      renderStudentBalances && renderStudentBalances();
+      renderFeeOverview    && renderFeeOverview();
+      showToast(`${added} new records, ${updated} updated, ${skipped} skipped ✓`, 'success');
+    } catch(err) { showToast('Error reading file', 'error'); console.error(err); }
+  };
+  reader.readAsArrayBuffer(file); input.value = '';
+}
+
+function downloadFeeImportTemplate() {
+  const data = [{
+    AdmNo: 'ADM001', Term: 'Term 1', Year: '2025', TotalFee: 12000,
+    AmountPaid: 6000, PaymentDate: '2025-01-15', PaymentMode: 'Mpesa',
+    ReceiptNo: 'RCP001', Notes: 'First instalment'
+  }];
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'FeePayments');
+  XLSX.writeFile(wb, 'fee_payments_template.xlsx');
+}
+
+
   loadFees();
   const filterClass = document.getElementById('fovClass')?.value || '';
   const filterTerm  = document.getElementById('fovTerm')?.value  || '';
@@ -6302,7 +6642,6 @@ function printFeeReport() {
   </body></html>`);
   win.document.close();
   setTimeout(() => { win.focus(); }, 300);
-}
 
 // ═══════════════════════════════════════════
 // REPORT FORM INTEGRATION
